@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{956276FF-64F6-4BF8-9423-0D491F0DEB90}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Open.API.Generator.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Open.API.Generator.Test.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="Open_API_Generator">
+        <MSBuild Projects="Open.API.Generator.dproj"/>
+    </Target>
+    <Target Name="Open_API_Generator:Clean">
+        <MSBuild Projects="Open.API.Generator.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Open_API_Generator:Make">
+        <MSBuild Projects="Open.API.Generator.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Open_API_Generator_Test">
+        <MSBuild Projects="Open.API.Generator.Test.dproj"/>
+    </Target>
+    <Target Name="Open_API_Generator_Test:Clean">
+        <MSBuild Projects="Open.API.Generator.Test.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Open_API_Generator_Test:Make">
+        <MSBuild Projects="Open.API.Generator.Test.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="Open_API_Generator;Open_API_Generator_Test"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="Open_API_Generator:Clean;Open_API_Generator_Test:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="Open_API_Generator:Make;Open_API_Generator_Test:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
