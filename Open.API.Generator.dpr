@@ -2,7 +2,8 @@ program Open.API.Generator;
 
 uses
   Vcl.Forms,
-  Main.Form in 'Main.Form.pas' {MainForm};
+  Main.Form in 'Main.Form.pas' {MainForm},
+  API.Generator in 'API.Generator.pas';
 
 {$R *.res}
 
