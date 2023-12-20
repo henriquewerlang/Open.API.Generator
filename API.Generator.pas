@@ -5,35 +5,58 @@ interface
 uses System.Classes, System.Generics.Collections;
 
 type
-  TType = class
+  TTypeDefinition = class
+  private
+    FDelphiName: String;
+    FName: String;
+  public
+    property DelphiName: String read FDelphiName write FDelphiName;
+    property Name: String read FName write FName;
   end;
 
   TProperty = class
   private
     FName: String;
-    FType: TType;
+    FType: TTypeDefinition;
   public
     property Name: String read FName write FName;
-    property &Type: TType read FType write FType;
+    property &Type: TTypeDefinition read FType write FType;
   end;
 
-  TClassType = class(TType)
+  TClassType = class(TTypeDefinition)
   private
-    FName: String;
     FProperties: TList<TProperty>;
   public
-    constructor Create(const Name: String);
+    constructor Create;
 
-    property Name: String read FName write FName;
+    destructor Destroy; override;
+
     property Properties: TList<TProperty> read FProperties write FProperties;
   end;
 
-  TStringType = class(TType)
+  TBooleanType = class(TTypeDefinition)
+  public
+    constructor Create;
+  end;
+
+  TIntegerType = class(TTypeDefinition)
+  public
+    constructor Create;
+  end;
+
+  TNumberType = class(TTypeDefinition)
+  public
+    constructor Create;
+  end;
+
+  TStringType = class(TTypeDefinition)
+  public
+    constructor Create;
   end;
 
   TAPIGenerator = class
   private
-    FTypes: TList<TType>;
+    FTypes: TList<TTypeDefinition>;
   public
     constructor Create;
 
@@ -52,18 +75,48 @@ uses System.SysUtils, System.IOUtils, System.JSON;
 
 procedure TAPIGenerator.Load(const JSON: String);
 
-  function CreateType(const TypeDefinition: TJSONPair): TType;
+  function FindType(const TypeName: String): TTypeDefinition;
+  begin
+    Result := nil;
+
+    for var TypeDefinition in FTypes do
+      if TypeDefinition.Name = TypeName then
+        Exit(TypeDefinition);
+  end;
+
+  function CreateClassType(const TypeDefinition: TJSONPair): TClassType;
+  begin
+    var PropertiesDefinition := TJSONObject(TypeDefinition.JsonValue).GetValue('properties') as TJSONObject;
+    Result := TClassType.Create;
+    Result.DelphiName := 'T' + TypeDefinition.JsonString.Value;
+
+    if Assigned(PropertiesDefinition) then
+      for var PropertyDefinition in PropertiesDefinition do
+      begin
+        var NewProperty := TProperty.Create;
+        NewProperty.Name := PropertyDefinition.JsonString.Value;
+        NewProperty.&Type := FindType(TJSONObject(PropertyDefinition.JsonValue).GetValue('type').Value);
+
+        Result.Properties.Add(NewProperty);
+      end;
+  end;
+
+  function CreateType(const TypeDefinition: TJSONPair): TTypeDefinition;
   begin
     var Definition := TypeDefinition.JsonValue as TJSONObject;
+    var &Type := Definition.Values['type'];
 
-    if Definition.Values['type'].Value = 'object' then
-      Result := TClassType.Create(TypeDefinition.JsonString.Value)
+    if not Assigned(&Type) or (&Type.Value = 'object') then
+      Result := CreateClassType(TypeDefinition)
     else
       Result := TStringType.Create;
+
+    Result.Name := TypeDefinition.JsonString.Value;
   end;
 
 begin
-  var OpenAPIObject := TJSONValue.ParseJSONValue(JSON) as TJSONObject;
+  var OpenAPIObject := TJSONValue.ParseJSONValue(JSON, True, True) as TJSONObject;
+
   var DefinitionsObject := OpenAPIObject.Values['definitions'] as TJSONObject;
 
   if Assigned(DefinitionsObject) then
@@ -77,7 +130,15 @@ constructor TAPIGenerator.Create;
 begin
   inherited;
 
-  FTypes := TObjectList<TType>.Create;
+  FTypes := TObjectList<TTypeDefinition>.Create;
+
+  FTypes.Add(TBooleanType.Create);
+
+  FTypes.Add(TIntegerType.Create);
+
+  FTypes.Add(TNumberType.Create);
+
+  FTypes.Add(TStringType.Create);
 end;
 
 destructor TAPIGenerator.Destroy;
@@ -88,8 +149,28 @@ begin
 end;
 
 procedure TAPIGenerator.Generate(const UnitName: String; const Output: TStream);
+var
+  StreamWriter: TStreamWriter;
+
+  procedure GenerateClass(AClass: TClassType);
+  begin
+    StreamWriter.WriteLine('  %s = class', [AClass.DelphiName]);
+
+    StreamWriter.WriteLine('  private');
+
+    for var AProperty in AClass.Properties do
+      StreamWriter.WriteLine('    F%s: %s;', [AProperty.Name, AProperty.&Type.DelphiName]);
+
+    StreamWriter.WriteLine('  public');
+
+    for var AProperty in AClass.Properties do
+      StreamWriter.WriteLine('    property %0:s: %1:s read F%0:s write F%0:s;', [AProperty.Name, AProperty.&Type.DelphiName]);
+
+    StreamWriter.WriteLine('  end;');
+  end;
+
 begin
-  var StreamWriter := TStreamWriter.Create(Output);
+  StreamWriter := TStreamWriter.Create(Output);
 
   StreamWriter.WriteLine('''
     unit %s;
@@ -101,10 +182,7 @@ begin
 
   for var AType in FTypes do
     if AType is TClassType then
-      StreamWriter.WriteLine('''
-          T%s = class
-          end;
-        ''', [TClassType(AType).Name]);
+      GenerateClass(TClassType(AType));
 
   StreamWriter.WriteLine('''
     implementation
@@ -122,11 +200,48 @@ end;
 
 { TClassType }
 
-constructor TClassType.Create(const Name: String);
+constructor TClassType.Create;
 begin
-  inherited Create;
+  FProperties := TObjectList<TProperty>.Create;
+end;
 
-  FName := Name;
+destructor TClassType.Destroy;
+begin
+  FProperties.Free;
+
+  inherited;
+end;
+
+{ TBooleanType }
+
+constructor TBooleanType.Create;
+begin
+  DelphiName := 'Boolean';
+  Name := 'boolean';
+end;
+
+{ TIntegerType }
+
+constructor TIntegerType.Create;
+begin
+  DelphiName := 'Integer';
+  Name := 'integer';
+end;
+
+{ TNumberType }
+
+constructor TNumberType.Create;
+begin
+  DelphiName := 'Double';
+  Name := 'number';
+end;
+
+{ TStringType }
+
+constructor TStringType.Create;
+begin
+  DelphiName := 'String';
+  Name := 'string';
 end;
 
 end.
