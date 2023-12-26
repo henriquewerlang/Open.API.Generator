@@ -284,6 +284,12 @@ begin
       'type'#13#10, [UnitName]);
 
     for var AType in FTypes do
+      if (AType is TClassType) or (AType is TAllOfClassType) then
+        StreamWriter.WriteLine(Format('  %s = class;', [AType.DelphiName]));
+
+    StreamWriter.WriteLine;
+
+    for var AType in FTypes do
       if AType is TClassType then
         GenerateClass(TClassType(AType))
       else if AType is TAllOfClassType then

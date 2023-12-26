@@ -49,6 +49,8 @@ type
     procedure WhenAnAllOfClassHasAReferenceToATypeMustLoadThePropertiesFromThisReferenceToGenerateTheClassDeclaration;
     [Test]
     procedure WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
+    [Test]
+    procedure WhenGeneratingTheUnitMustDeclareTheClassAliasOfAllClassesInTheDefinition;
   end;
 
 implementation
@@ -330,11 +332,41 @@ begin
     'interface'#13#10 +
     #13#10 +
     'type'#13#10 +
+    #13#10 +
     'implementation'#13#10 +
     #13#10 +
     'end.'#13#10;
 
   Assert.AreEqual(UnitExpected, Generate('MyUnit', '{}').DataString);
+end;
+
+procedure TAPIGeneratorTest.WhenGeneratingTheUnitMustDeclareTheClassAliasOfAllClassesInTheDefinition;
+begin
+  var ExpectedUnit :=
+    'unit MyUnit;'#13#10 +
+    #13#10 +
+    'interface'#13#10 +
+    #13#10 +
+    'type'#13#10 +
+    '  TMyClass = class;'#13#10 +
+    #13#10 +
+    '  TMyClass = class'#13#10 +
+    '  end;'#13#10 +
+    #13#10 +
+    'implementation'#13#10 +
+    #13#10 +
+    'end.'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+        }
+      }
+    }
+    ''';
+
+  Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON).DataString);
 end;
 
 procedure TAPIGeneratorTest.WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
