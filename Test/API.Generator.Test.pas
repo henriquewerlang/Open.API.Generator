@@ -43,6 +43,12 @@ type
     procedure WhenAPropertyHasAReferenceForATypeDefinitionMustLoadThePropetyAsExpected;
     [Test]
     procedure WhenTheReferenceOfAPropertyIsntDefinedMustRaiseAnError;
+    [Test]
+    procedure WhenTheJSONHasAllOfTypeMustGenerateAClassWithAllPropertiesInThisSection;
+    [Test]
+    procedure WhenAnAllOfClassHasAReferenceToATypeMustLoadThePropertiesFromThisReferenceToGenerateTheClassDeclaration;
+    [Test]
+    procedure WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
   end;
 
 implementation
@@ -73,13 +79,16 @@ end;
 function TAPIGeneratorTest.GetClassDefinition(const ClassName: String): String;
 begin
   Result := EmptyStr;
-  for var A := FLines.IndexOf(Format('  %s = class', [ClassName])) to Pred(FLines.Count) do
-  begin
-    Result := Result + FLines[A] + sLineBreak;
+  var StartIndex := FLines.IndexOf(Format('  %s = class', [ClassName]));
 
-    if FLines[A] = '  end;' then
-      Break;
-  end;
+  if StartIndex > -1 then
+    for var A := StartIndex to Pred(FLines.Count) do
+    begin
+      Result := Result + FLines[A] + sLineBreak;
+
+      if FLines[A] = '  end;' then
+        Break;
+    end;
 end;
 
 procedure TAPIGeneratorTest.IfTheTypeDoesntExistsMustRaiseAnError;
@@ -200,6 +209,43 @@ begin
   Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
 end;
 
+procedure TAPIGeneratorTest.WhenAnAllOfClassHasAReferenceToATypeMustLoadThePropertiesFromThisReferenceToGenerateTheClassDeclaration;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FReferenceProperty: Boolean;'#13#10 +
+    '  public'#13#10 +
+    '    property ReferenceProperty: Boolean read FReferenceProperty write FReferenceProperty;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/MyRef"
+            }
+          ]
+        },
+        "MyRef": {
+          "type": "object",
+          "properties": {
+            "ReferenceProperty": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
 procedure TAPIGeneratorTest.WhenAPropertyHasAReferenceForATypeDefinitionMustLoadThePropetyAsExpected;
 begin
   var ExpectedClass :=
@@ -291,6 +337,26 @@ begin
   Assert.AreEqual(UnitExpected, Generate('MyUnit', '{}').DataString);
 end;
 
+procedure TAPIGeneratorTest.WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
 procedure TAPIGeneratorTest.WhenTheDefinitionDontHaveATypeTheDefaultTypeMustBeObject;
 begin
   var JSON := '''
@@ -314,6 +380,60 @@ begin
     begin
       Generate('MyUnit', '{}');
     end);
+end;
+
+procedure TAPIGeneratorTest.WhenTheJSONHasAllOfTypeMustGenerateAClassWithAllPropertiesInThisSection;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FProp1: String;'#13#10 +
+    '    FProp2: String;'#13#10 +
+    '    FProp3: String;'#13#10 +
+    '  public'#13#10 +
+    '    property Prop1: String read FProp1 write FProp1;'#13#10 +
+    '    property Prop2: String read FProp2 write FProp2;'#13#10 +
+    '    property Prop3: String read FProp3 write FProp3;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "allOf": [
+            {
+              "type": "object",
+              "properties": {
+                "Prop1": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "Prop2": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "Prop3": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
 end;
 
 procedure TAPIGeneratorTest.WhenTheReferenceOfAPropertyIsntDefinedMustRaiseAnError;
