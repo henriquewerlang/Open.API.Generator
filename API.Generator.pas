@@ -96,7 +96,8 @@ type
 
     destructor Destroy; override;
 
-    procedure Generate(const UnitName: String; const Output: TStream);
+    procedure Generate(const UnitName: String; const Output: TStream); overload;
+    procedure Generate(const UnitFileName: String); overload;
     procedure Load(const JSON: String);
     procedure LoadFromFile(const FileName: String);
   end;
@@ -218,6 +219,17 @@ begin
   raise EReferenceTypeNotExists.CreateFmt('The reference type %s isn''t defined!', [ReferenceType.ReferenceName]);
 end;
 
+procedure TAPIGenerator.Generate(const UnitFileName: String);
+begin
+  var OutputFile := TFile.Open(UnitFileName, TFileMode.fmOpenOrCreate);
+
+  try
+    Generate(TPath.GetFileNameWithoutExtension(UnitFileName), OutputFile);
+  finally
+    OutputFile.Free;
+  end;
+end;
+
 procedure TAPIGenerator.Generate(const UnitName: String; const Output: TStream);
 var
   StreamWriter: TStreamWriter;
@@ -273,7 +285,7 @@ var
   end;
 
 begin
-  StreamWriter := TStreamWriter.Create(Output);
+  StreamWriter := TStreamWriter.Create(Output, TEncoding.UTF8);
 
   try
     StreamWriter.Write(

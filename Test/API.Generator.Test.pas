@@ -51,6 +51,8 @@ type
     procedure WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
     [Test]
     procedure WhenGeneratingTheUnitMustDeclareTheClassAliasOfAllClassesInTheDefinition;
+    [Test]
+    procedure WhenGenerateAnUnitUsingTheFileNameMustGenerateTheUnitWithTheFileName;
   end;
 
 implementation
@@ -322,6 +324,39 @@ begin
   Generate('MyUnit', JSON);
 
   Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
+procedure TAPIGeneratorTest.WhenGenerateAnUnitUsingTheFileNameMustGenerateTheUnitWithTheFileName;
+begin
+  var ExpectedUnit :=
+    'unit %s;'#13#10 +
+    #13#10 +
+    'interface'#13#10 +
+    #13#10 +
+    'type'#13#10 +
+    '  TMyClass = class;'#13#10 +
+    #13#10 +
+    '  TMyClass = class'#13#10 +
+    '  end;'#13#10 +
+    #13#10 +
+    'implementation'#13#10 +
+    #13#10 +
+    'end.'#13#10;
+  var FileName := TPath.GetTempFileName;
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+        }
+      }
+    }
+    ''';
+
+  FGenerator.Load(JSON);
+
+  FGenerator.Generate(FileName);
+
+  Assert.AreEqual(Format(ExpectedUnit, [TPath.GetFileNameWithoutExtension(FileName)]), TFile.ReadAllText(FileName));
 end;
 
 procedure TAPIGeneratorTest.WhenGenerateTheFileWithoutAnyClassMustCreateADefaltUnitFile;

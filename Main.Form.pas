@@ -9,8 +9,6 @@ type
     SelectFiles: TButton;
     Files: TOpenDialog;
     SaveFile: TSaveDialog;
-    UnitName: TEdit;
-    lblUnitName: TLabel;
     procedure SelectFilesClick(Sender: TObject);
   end;
 
@@ -34,7 +32,7 @@ begin
       Generator.LoadFromFile(FileName);
 
   if SaveFile.Execute then
-    Generator.Generate(UnitName.Text, TFile.Open(SaveFile.FileName, TFileMode.fmOpenOrCreate));
+    Generator.Generate(SaveFile.FileName);
 end;
 
 end.
