@@ -12,7 +12,7 @@ type
     FLines: TList<String>;
     FOutput: TStringStream;
 
-    function Generate(const UnitName, JSON: String): TStringStream;
+    function Generate(const UnitName, JSON: String): String;
     function GetClassDefinition(const ClassName: String): String;
   public
     [Setup]
@@ -40,6 +40,8 @@ type
     [Test]
     procedure WhenTheTypeOfAPropertyIsAnArrayMustDeclareThePropertyAsExpected;
     [Test]
+    procedure WhenTheItemTypeOfAnArrayIsAReferenceTypeMustDeclareTheArrayWithTheReferenceName;
+    [Test]
     procedure WhenAPropertyHasAReferenceForATypeDefinitionMustLoadThePropetyAsExpected;
     [Test]
     procedure WhenTheReferenceOfAPropertyIsntDefinedMustRaiseAnError;
@@ -53,6 +55,8 @@ type
     procedure WhenGeneratingTheUnitMustDeclareTheClassAliasOfAllClassesInTheDefinition;
     [Test]
     procedure WhenGenerateAnUnitUsingTheFileNameMustGenerateTheUnitWithTheFileName;
+    [Test]
+    procedure WhenAClassDeclarationHasAnotherClassDeclarationInsideMustGenerateTheClassesWithTheParentClassNameInTheClassName;
   end;
 
 implementation
@@ -61,10 +65,9 @@ uses System.SysUtils, System.IOUtils;
 
 { TAPIGeneratorTest }
 
-function TAPIGeneratorTest.Generate(const UnitName, JSON: String): TStringStream;
+function TAPIGeneratorTest.Generate(const UnitName, JSON: String): String;
 begin
   var Reader := TStreamReader.Create(FOutput);
-  Result := FOutput;
 
   try
     FGenerator.Load(JSON);
@@ -75,6 +78,10 @@ begin
 
     while not Reader.EndOfStream do
       FLines.Add(Reader.ReadLine);
+
+    Reader.Rewind;
+
+    Result := Reader.ReadToEnd;
   finally
     Reader.Free;
   end;
@@ -211,6 +218,46 @@ begin
   Generate('MyUnit', JSON);
 
   Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
+procedure TAPIGeneratorTest.WhenAClassDeclarationHasAnotherClassDeclarationInsideMustGenerateTheClassesWithTheParentClassNameInTheClassName;
+begin
+  var ExpectedClass :=
+    '  TMyClassInsideAnotherClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FProp: Boolean;'#13#10 +
+    '  public'#13#10 +
+    '    property Prop: Boolean read FProp write FProp;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "type": "object",
+          "properties": {
+            "Inside": {
+              "type": "object",
+              "properties": {
+                "AnotherClass": {
+                  "type": "object",
+                  "properties": {
+                    "Prop": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClassInsideAnotherClass'));
 end;
 
 procedure TAPIGeneratorTest.WhenAnAllOfClassHasAReferenceToATypeMustLoadThePropertiesFromThisReferenceToGenerateTheClassDeclaration;
@@ -372,7 +419,7 @@ begin
     #13#10 +
     'end.'#13#10;
 
-  Assert.AreEqual(UnitExpected, Generate('MyUnit', '{}').DataString);
+  Assert.AreEqual(UnitExpected, Generate('MyUnit', '{}'));
 end;
 
 procedure TAPIGeneratorTest.WhenGeneratingTheUnitMustDeclareTheClassAliasOfAllClassesInTheDefinition;
@@ -401,7 +448,7 @@ begin
     }
     ''';
 
-  Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON).DataString);
+  Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON));
 end;
 
 procedure TAPIGeneratorTest.WhenTheClassHasntAnyPropertyMustCreateOnlyTheClassDeclaration;
@@ -438,6 +485,46 @@ begin
   Generate('MyUnit', JSON);
 
   Assert.IsTrue(FLines.IndexOf('  TMyClass = class') >= 0);
+end;
+
+procedure TAPIGeneratorTest.WhenTheItemTypeOfAnArrayIsAReferenceTypeMustDeclareTheArrayWithTheReferenceName;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FProp: TArray<TMyRef>;'#13#10 +
+    '  public'#13#10 +
+    '    property Prop: TArray<TMyRef> read FProp write FProp;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "properties": {
+            "Prop": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/MyRef"
+              }
+            }
+          }
+        },
+        "MyRef": {
+          "type": "object",
+          "properties": {
+            "ReferenceProperty": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
 end;
 
 procedure TAPIGeneratorTest.WhenTheJSONDoesntHaveTheDefinitionPropertyCantRaiseAnyErrorWhenGeneratingTheAPI;

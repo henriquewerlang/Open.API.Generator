@@ -91,6 +91,10 @@ type
     function CreateType(const TypeDeclaration: TJSONObject): TTypeDefinition;
     function CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
     function FindReferenceType(const ReferenceType: TReferenceType): TTypeDefinition;
+    function IsClassDeclaration(const TypeDefinition: TTypeDefinition): Boolean;
+
+    procedure GenerateClassName(const ParentClass, TheClass: TTypeDefinition; const ClassName: String);
+    procedure GeneratePropertyClassName(const TheClass: TClassType);
   public
     constructor Create;
 
@@ -199,8 +203,13 @@ begin
   Result := CreateType(TypeDeclaration.JsonValue as TJSONObject);
   Result.Name := TypeDeclaration.JsonString.Value;
 
-  if (Result is TClassType) or (Result is TAllOfClassType) then
+  if IsClassDeclaration(Result) then
+  begin
     Result.DelphiName := 'T' + Result.Name;
+
+    if Result is TClassType then
+      GeneratePropertyClassName(TClassType(Result));
+  end;
 end;
 
 destructor TAPIGenerator.Destroy;
@@ -230,6 +239,26 @@ begin
   end;
 end;
 
+procedure TAPIGenerator.GenerateClassName(const ParentClass, TheClass: TTypeDefinition; const ClassName: String);
+begin
+  TheClass.DelphiName := ParentClass.DelphiName + ClassName;
+
+  if TheClass is TClassType then
+    GeneratePropertyClassName(TClassType(TheClass));
+end;
+
+procedure TAPIGenerator.GeneratePropertyClassName(const TheClass: TClassType);
+begin
+  for var PropertyDeclaration in TheClass.Properties do
+    if IsClassDeclaration(PropertyDeclaration.&Type) then
+      GenerateClassName(TheClass, PropertyDeclaration.&Type, PropertyDeclaration.Name);
+end;
+
+function TAPIGenerator.IsClassDeclaration(const TypeDefinition: TTypeDefinition): Boolean;
+begin
+  Result := (TypeDefinition is TClassType) or (TypeDefinition is TAllOfClassType);
+end;
+
 procedure TAPIGenerator.Generate(const UnitName: String; const Output: TStream);
 var
   StreamWriter: TStreamWriter;
@@ -239,7 +268,7 @@ var
     Result := &Type.DelphiName;
 
     if &Type is TArrayType then
-      Result := Result + '<' + TArrayType(&Type).ItemType.DelphiName + '>'
+      Result := Result + '<' + GetTypeDeclaration(TArrayType(&Type).ItemType) + '>'
     else if &Type is TReferenceType then
       Result := GetTypeDeclaration(FindReferenceType(TReferenceType(&Type)));
   end;
@@ -296,7 +325,7 @@ begin
       'type'#13#10, [UnitName]);
 
     for var AType in FTypes do
-      if (AType is TClassType) or (AType is TAllOfClassType) then
+      if IsClassDeclaration(AType) then
         StreamWriter.WriteLine(Format('  %s = class;', [AType.DelphiName]));
 
     StreamWriter.WriteLine;
