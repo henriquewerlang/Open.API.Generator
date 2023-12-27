@@ -63,6 +63,8 @@ type
     procedure WhenTheSubclassDeclarationIsLowerCaseMustFixTheClassNameDeclaration;
     [Test]
     procedure WhenAnAllOfDeclarationHasASubObjectDeclarationTheClassGeneratedCantBeDeclaratedInTheGeneretedUnit;
+    [Test]
+    procedure WhenLoadMoreThenOnceTheJSONCantDuplicateTheTypesDeclaration;
   end;
 
 implementation
@@ -516,6 +518,40 @@ begin
       }
     }
     ''';
+
+  Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON));
+end;
+
+procedure TAPIGeneratorTest.WhenLoadMoreThenOnceTheJSONCantDuplicateTheTypesDeclaration;
+begin
+  var ExpectedUnit :=
+    'unit MyUnit;'#13#10 +
+    #13#10 +
+    'interface'#13#10 +
+    #13#10 +
+    'type'#13#10 +
+    '  TMyClass = class;'#13#10 +
+    #13#10 +
+    '  TMyClass = class'#13#10 +
+    '  end;'#13#10 +
+    #13#10 +
+    'implementation'#13#10 +
+    #13#10 +
+    'end.'#13#10;
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Generate('MyUnit', JSON);
+
+  FOutput.Size := 0;
 
   Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON));
 end;

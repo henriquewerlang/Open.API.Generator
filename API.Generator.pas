@@ -99,6 +99,7 @@ type
     function CreateType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TTypeDefinition;
     function CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
     function FindReferenceType(const ReferenceType: TReferenceType): TTypeDefinition;
+    function FindTypeDefinition(const Name: String): TTypeDefinition;
     function FixDeclarationName(const Name: String): String;
     function IsClassDeclaration(const TypeDefinition: TTypeDefinition): Boolean;
     function IsObjectDeclaration(const &Type: TJSONValue): Boolean;
@@ -201,15 +202,22 @@ end;
 
 function TAPIGenerator.CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
 begin
-  Result := CreateType(TypeDeclaration.JsonValue as TJSONObject, TClassType);
-  Result.Name := TypeDeclaration.JsonString.Value;
+  var TypeName := TypeDeclaration.JsonString.Value;
 
-  if IsClassDeclaration(Result) then
+  Result := FindTypeDefinition(TypeName);
+
+  if not Assigned(Result) then
   begin
-    Result.DelphiName := 'T' + Result.Name;
+    Result := CreateType(TypeDeclaration.JsonValue as TJSONObject, TClassType);
+    Result.Name := TypeName;
 
-    if Result is TClassType then
-      GeneratePropertyClassName(TClassType(Result));
+    if IsClassDeclaration(Result) then
+    begin
+      Result.DelphiName := 'T' + Result.Name;
+
+      if Result is TClassType then
+        GeneratePropertyClassName(TClassType(Result));
+    end;
   end;
 end;
 
@@ -222,11 +230,19 @@ end;
 
 function TAPIGenerator.FindReferenceType(const ReferenceType: TReferenceType): TTypeDefinition;
 begin
+  Result := FindTypeDefinition(ReferenceType.ReferenceName);
+
+  if not Assigned(Result) then
+    raise EReferenceTypeNotExists.CreateFmt('The reference type %s isn''t defined!', [ReferenceType.ReferenceName]);
+end;
+
+function TAPIGenerator.FindTypeDefinition(const Name: String): TTypeDefinition;
+begin
   for var TypeDefinition in FTypes do
-    if TypeDefinition.Name = ReferenceType.ReferenceName then
+    if TypeDefinition.Name = Name then
       Exit(TypeDefinition);
 
-  raise EReferenceTypeNotExists.CreateFmt('The reference type %s isn''t defined!', [ReferenceType.ReferenceName]);
+  Result := nil;
 end;
 
 function TAPIGenerator.FixDeclarationName(const Name: String): String;
