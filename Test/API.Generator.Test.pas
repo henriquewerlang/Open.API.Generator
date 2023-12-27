@@ -57,6 +57,12 @@ type
     procedure WhenGenerateAnUnitUsingTheFileNameMustGenerateTheUnitWithTheFileName;
     [Test]
     procedure WhenAClassDeclarationHasAnotherClassDeclarationInsideMustGenerateTheClassesWithTheParentClassNameInTheClassName;
+    [Test]
+    procedure WhenThePropertyIsLowerCaseMustFixTheFieldDeclarationToTheNameExpectedByDelphi;
+    [Test]
+    procedure WhenTheSubclassDeclarationIsLowerCaseMustFixTheClassNameDeclaration;
+    [Test]
+    procedure WhenAnAllOfDeclarationHasASubObjectDeclarationTheClassGeneratedCantBeDeclaratedInTheGeneretedUnit;
   end;
 
 implementation
@@ -295,6 +301,69 @@ begin
   Generate('MyUnit', JSON);
 
   Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
+procedure TAPIGeneratorTest.WhenAnAllOfDeclarationHasASubObjectDeclarationTheClassGeneratedCantBeDeclaratedInTheGeneretedUnit;
+begin
+  var ExpectedUnit :=
+    'unit MyUnit;'#13#10 +
+    #13#10 +
+    'interface'#13#10 +
+    #13#10 +
+    'type'#13#10 +
+    '  TMyClass = class;'#13#10 +
+    #13#10 +
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FProp1: String;'#13#10 +
+    '    FProp2: String;'#13#10 +
+    '    FProp3: String;'#13#10 +
+    '  public'#13#10 +
+    '    property Prop1: String read FProp1 write FProp1;'#13#10 +
+    '    property Prop2: String read FProp2 write FProp2;'#13#10 +
+    '    property Prop3: String read FProp3 write FProp3;'#13#10 +
+    '  end;'#13#10 +
+    #13#10 +
+    'implementation'#13#10 +
+    #13#10 +
+    'end.'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "allOf": [
+            {
+              "type": "object",
+              "properties": {
+                "Prop1": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "Prop2": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "Prop3": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+    ''';
+
+  Assert.AreEqual(ExpectedUnit, Generate('MyUnit', JSON));
 end;
 
 procedure TAPIGeneratorTest.WhenAPropertyHasAReferenceForATypeDefinitionMustLoadThePropetyAsExpected;
@@ -590,6 +659,35 @@ begin
   Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
 end;
 
+procedure TAPIGeneratorTest.WhenThePropertyIsLowerCaseMustFixTheFieldDeclarationToTheNameExpectedByDelphi;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FPropertyName: Boolean;'#13#10 +
+    '  public'#13#10 +
+    '    property propertyName: Boolean read FPropertyName write FPropertyName;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "properties": {
+            "propertyName": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
 procedure TAPIGeneratorTest.WhenTheReferenceOfAPropertyIsntDefinedMustRaiseAnError;
 begin
   var JSON := '''
@@ -611,6 +709,46 @@ begin
     begin
       Generate('MyUnit', JSON);
     end, EReferenceTypeNotExists);
+end;
+
+procedure TAPIGeneratorTest.WhenTheSubclassDeclarationIsLowerCaseMustFixTheClassNameDeclaration;
+begin
+  var ExpectedClass :=
+    '  TMyClassInsideAnotherClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FProp: Boolean;'#13#10 +
+    '  public'#13#10 +
+    '    property Prop: Boolean read FProp write FProp;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "type": "object",
+          "properties": {
+            "inside": {
+              "type": "object",
+              "properties": {
+                "anotherClass": {
+                  "type": "object",
+                  "properties": {
+                    "Prop": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClassInsideAnotherClass'));
 end;
 
 procedure TAPIGeneratorTest.WhenTheTypeDefinitionAsAnObjectDefinitionMustCreateAClassDeclarationInTheOutputFile;

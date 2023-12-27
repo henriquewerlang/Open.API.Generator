@@ -26,7 +26,7 @@ type
     property &Type: TTypeDefinition read FType write FType;
   end;
 
-  TClassType = class(TTypeDefinition)
+  TClassBaseType = class(TTypeDefinition)
   private
     FProperties: TList<TProperty>;
   public
@@ -37,11 +37,17 @@ type
     property Properties: TList<TProperty> read FProperties write FProperties;
   end;
 
+  TClassType = class(TClassBaseType)
+  end;
+
   TAllOfClassType = class(TTypeDefinition)
   private
     FDefinitions: TArray<TTypeDefinition>;
   public
     property Definitions: TArray<TTypeDefinition> read FDefinitions write FDefinitions;
+  end;
+
+  TAllOfSubClassType = class(TClassBaseType)
   end;
 
   TArrayType = class(TTypeDefinition)
@@ -82,19 +88,24 @@ type
     constructor Create;
   end;
 
+  TClassBaseTypeClass = class of TClassBaseType;
+
   TAPIGenerator = class
   private
     FTypes: TList<TTypeDefinition>;
 
     function CreateAllOfClassType(const TypeDeclaration: TJSONObject): TAllOfClassType;
-    function CreateClassType(const TypeDeclaration: TJSONObject): TClassType;
-    function CreateType(const TypeDeclaration: TJSONObject): TTypeDefinition;
+    function CreateClassType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TClassBaseType;
+    function CreateType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TTypeDefinition;
     function CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
     function FindReferenceType(const ReferenceType: TReferenceType): TTypeDefinition;
+    function FixDeclarationName(const Name: String): String;
     function IsClassDeclaration(const TypeDefinition: TTypeDefinition): Boolean;
+    function IsObjectDeclaration(const &Type: TJSONValue): Boolean;
 
     procedure GenerateClassName(const ParentClass, TheClass: TTypeDefinition; const ClassName: String);
     procedure GeneratePropertyClassName(const TheClass: TClassType);
+    procedure LoadProperties(const TheClass: TClassBaseType; const TypeDeclaration: TJSONObject);
   public
     constructor Create;
 
@@ -108,7 +119,7 @@ type
 
 implementation
 
-uses System.IOUtils;
+uses System.IOUtils, System.Character;
 
 { TAPIGenerator }
 
@@ -139,25 +150,15 @@ begin
   Result := TAllOfClassType.Create;
 
   for var Item in TypeDeclaration.Values['allOf'] as TJSONArray do
-    Result.Definitions := Result.Definitions + [CreateType(Item as TJSONObject)];
+    Result.Definitions := Result.Definitions + [CreateType(Item as TJSONObject, TAllOfSubClassType)];
 end;
 
-function TAPIGenerator.CreateClassType(const TypeDeclaration: TJSONObject): TClassType;
+function TAPIGenerator.CreateClassType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TClassBaseType;
 begin
-  var Properties := TypeDeclaration.Get('properties');
-  Result := TClassType.Create;
+  Result := ClassType.Create;
 
   try
-    if Assigned(Properties) then
-      for var PropertyDefinition in Properties.JsonValue as TJSONObject do
-      begin
-        var NewProperty := TProperty.Create;
-        NewProperty.Name := PropertyDefinition.JsonString.Value;
-
-        Result.Properties.Add(NewProperty);
-
-        NewProperty.&Type := CreateType(TJSONObject(PropertyDefinition.JsonValue));
-      end;
+    LoadProperties(Result, TypeDeclaration);
   except
     Result.Free;
 
@@ -165,7 +166,7 @@ begin
   end;
 end;
 
-function TAPIGenerator.CreateType(const TypeDeclaration: TJSONObject): TTypeDefinition;
+function TAPIGenerator.CreateType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TTypeDefinition;
 begin
   var AllOf := TypeDeclaration.Values['allOf'];
   var Reference := TypeDeclaration.Values['$ref'];
@@ -175,8 +176,8 @@ begin
     Result := TReferenceType.Create(Reference.Value)
   else if Assigned(AllOf) then
     Result := CreateAllOfClassType(TypeDeclaration)
-  else if not Assigned(&Type) or (&Type.Value = 'object') then
-    Result := CreateClassType(TypeDeclaration)
+  else if IsObjectDeclaration(&Type) then
+    Result := CreateClassType(TypeDeclaration, ClassType)
   else if &Type.Value = 'boolean' then
     Result := TBooleanType.Create
   else if &Type.Value = 'integer' then
@@ -188,7 +189,7 @@ begin
   else if &Type.Value = 'array' then
   begin
     var ArrayType := TArrayType.Create;
-    ArrayType.ItemType := CreateType(TypeDeclaration.Get('items').JsonValue as TJSONObject);
+    ArrayType.ItemType := CreateType(TypeDeclaration.Get('items').JsonValue as TJSONObject, ClassType);
 
     Result := ArrayType;
   end
@@ -200,7 +201,7 @@ end;
 
 function TAPIGenerator.CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
 begin
-  Result := CreateType(TypeDeclaration.JsonValue as TJSONObject);
+  Result := CreateType(TypeDeclaration.JsonValue as TJSONObject, TClassType);
   Result.Name := TypeDeclaration.JsonString.Value;
 
   if IsClassDeclaration(Result) then
@@ -228,6 +229,11 @@ begin
   raise EReferenceTypeNotExists.CreateFmt('The reference type %s isn''t defined!', [ReferenceType.ReferenceName]);
 end;
 
+function TAPIGenerator.FixDeclarationName(const Name: String): String;
+begin
+  Result := Name[1].ToUpper + Name.SubString(1);
+end;
+
 procedure TAPIGenerator.Generate(const UnitFileName: String);
 begin
   var OutputFile := TFile.Open(UnitFileName, TFileMode.fmOpenOrCreate);
@@ -241,7 +247,7 @@ end;
 
 procedure TAPIGenerator.GenerateClassName(const ParentClass, TheClass: TTypeDefinition; const ClassName: String);
 begin
-  TheClass.DelphiName := ParentClass.DelphiName + ClassName;
+  TheClass.DelphiName := ParentClass.DelphiName + FixDeclarationName(ClassName);
 
   if TheClass is TClassType then
     GeneratePropertyClassName(TClassType(TheClass));
@@ -257,6 +263,11 @@ end;
 function TAPIGenerator.IsClassDeclaration(const TypeDefinition: TTypeDefinition): Boolean;
 begin
   Result := (TypeDefinition is TClassType) or (TypeDefinition is TAllOfClassType);
+end;
+
+function TAPIGenerator.IsObjectDeclaration(const &Type: TJSONValue): Boolean;
+begin
+  Result := not Assigned(&Type) or (&Type.Value = 'object');
 end;
 
 procedure TAPIGenerator.Generate(const UnitName: String; const Output: TStream);
@@ -282,12 +293,12 @@ var
       StreamWriter.WriteLine('  private');
 
       for var AProperty in Properties do
-        StreamWriter.WriteLine('    F%s: %s;', [AProperty.Name, GetTypeDeclaration(AProperty.&Type)]);
+        StreamWriter.WriteLine('    F%s: %s;', [FixDeclarationName(AProperty.Name), GetTypeDeclaration(AProperty.&Type)]);
 
       StreamWriter.WriteLine('  public');
 
       for var AProperty in Properties do
-        StreamWriter.WriteLine('    property %0:s: %1:s read F%0:s write F%0:s;', [AProperty.Name, GetTypeDeclaration(AProperty.&Type)]);
+        StreamWriter.WriteLine('    property %0:s: %1:s read F%2:s write F%2:s;', [AProperty.Name, GetTypeDeclaration(AProperty.&Type), FixDeclarationName(AProperty.Name)]);
     end;
 
     StreamWriter.WriteLine('  end;'#13#10);
@@ -303,10 +314,10 @@ var
     var Properties := TList<TProperty>.Create;
 
     for var TypeDefinition in AClass.Definitions do
-      if TypeDefinition is TClassType then
-        Properties.AddRange(TClassType(TypeDefinition).Properties)
+      if TypeDefinition is TClassBaseType then
+        Properties.AddRange(TClassBaseType(TypeDefinition).Properties)
       else if TypeDefinition is TReferenceType then
-        Properties.AddRange((FindReferenceType(TReferenceType(TypeDefinition)) as TClassType).Properties);
+        Properties.AddRange((FindReferenceType(TReferenceType(TypeDefinition)) as TClassBaseType).Properties);
 
     GenerateClassProperties(AClass, Properties);
 
@@ -350,14 +361,30 @@ begin
   Load(TFile.ReadAllText(FileName));
 end;
 
-{ TClassType }
+procedure TAPIGenerator.LoadProperties(const TheClass: TClassBaseType; const TypeDeclaration: TJSONObject);
+begin
+  var Properties := TypeDeclaration.Get('properties');
 
-constructor TClassType.Create;
+  if Assigned(Properties) then
+    for var PropertyDefinition in Properties.JsonValue as TJSONObject do
+    begin
+      var NewProperty := TProperty.Create;
+      NewProperty.Name := PropertyDefinition.JsonString.Value;
+
+      TheClass.Properties.Add(NewProperty);
+
+      NewProperty.&Type := CreateType(TJSONObject(PropertyDefinition.JsonValue), TClassBaseTypeClass(TheClass.ClassType));
+    end;
+end;
+
+{ TClassBaseType }
+
+constructor TClassBaseType.Create;
 begin
   FProperties := TObjectList<TProperty>.Create;
 end;
 
-destructor TClassType.Destroy;
+destructor TClassBaseType.Destroy;
 begin
   FProperties.Free;
 
