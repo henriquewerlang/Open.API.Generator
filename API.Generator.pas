@@ -92,12 +92,14 @@ type
 
   TAPIGenerator = class
   private
+    FReservedNames: TList<String>;
     FTypes: TList<TTypeDefinition>;
 
     function CreateAllOfClassType(const TypeDeclaration: TJSONObject): TAllOfClassType;
     function CreateClassType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TClassBaseType;
     function CreateType(const TypeDeclaration: TJSONObject; const ClassType: TClassBaseTypeClass): TTypeDefinition;
     function CreateTypeDefinition(const TypeDeclaration: TJSONPair): TTypeDefinition;
+    function ScapeName(const Name: String): String;
     function FindReferenceType(const ReferenceType: TReferenceType): TTypeDefinition;
     function FindTypeDefinition(const Name: String): TTypeDefinition;
     function FixDeclarationName(const Name: String): String;
@@ -120,7 +122,7 @@ type
 
 implementation
 
-uses System.IOUtils, System.Character;
+uses System.IOUtils, System.Character, System.Generics.Defaults;
 
 { TAPIGenerator }
 
@@ -143,7 +145,13 @@ constructor TAPIGenerator.Create;
 begin
   inherited;
 
+  FReservedNames := TList<String>.Create(TDelegatedComparer<String>.Create(CompareText));
   FTypes := TObjectList<TTypeDefinition>.Create;
+
+  FReservedNames.Add('Property');
+  FReservedNames.Add('Record');
+  FReservedNames.Add('Type');
+  FReservedNames.Add('Unit');
 end;
 
 function TAPIGenerator.CreateAllOfClassType(const TypeDeclaration: TJSONObject): TAllOfClassType;
@@ -223,6 +231,8 @@ end;
 
 destructor TAPIGenerator.Destroy;
 begin
+  FReservedNames.Free;
+
   FTypes.Free;
 
   inherited;
@@ -253,6 +263,7 @@ end;
 procedure TAPIGenerator.Generate(const UnitFileName: String);
 begin
   var OutputFile := TFile.Open(UnitFileName, TFileMode.fmOpenOrCreate);
+  OutputFile.Size := 0;
 
   try
     Generate(TPath.GetFileNameWithoutExtension(UnitFileName), OutputFile);
@@ -314,7 +325,7 @@ var
       StreamWriter.WriteLine('  public');
 
       for var AProperty in Properties do
-        StreamWriter.WriteLine('    property %0:s: %1:s read F%2:s write F%2:s;', [AProperty.Name, GetTypeDeclaration(AProperty.&Type), FixDeclarationName(AProperty.Name)]);
+        StreamWriter.WriteLine('    property %0:s: %1:s read F%2:s write F%2:s;', [ScapeName(AProperty.Name), GetTypeDeclaration(AProperty.&Type), FixDeclarationName(AProperty.Name)]);
     end;
 
     StreamWriter.WriteLine('  end;'#13#10);
@@ -391,6 +402,14 @@ begin
 
       NewProperty.&Type := CreateType(TJSONObject(PropertyDefinition.JsonValue), TClassBaseTypeClass(TheClass.ClassType));
     end;
+end;
+
+function TAPIGenerator.ScapeName(const Name: String): String;
+begin
+  Result := Name;
+
+  if FReservedNames.Contains(Result) then
+    Result := '&' + Result;
 end;
 
 { TClassBaseType }

@@ -65,6 +65,8 @@ type
     procedure WhenAnAllOfDeclarationHasASubObjectDeclarationTheClassGeneratedCantBeDeclaratedInTheGeneretedUnit;
     [Test]
     procedure WhenLoadMoreThenOnceTheJSONCantDuplicateTheTypesDeclaration;
+    [Test]
+    procedure WhenAPropertyUseAnEspecialNameMustScapeThePropertyName;
   end;
 
 implementation
@@ -390,6 +392,50 @@ begin
         },
         "MyRef": {
           "type": "boolean"
+        }
+      }
+    }
+    ''';
+
+  Generate('MyUnit', JSON);
+
+  Assert.AreEqual(ExpectedClass, GetClassDefinition('TMyClass'));
+end;
+
+procedure TAPIGeneratorTest.WhenAPropertyUseAnEspecialNameMustScapeThePropertyName;
+begin
+  var ExpectedClass :=
+    '  TMyClass = class'#13#10 +
+    '  private'#13#10 +
+    '    FUnit: Boolean;'#13#10 +
+    '    FProperty: String;'#13#10 +
+    '    FType: Integer;'#13#10 +
+    '    FRecord: Double;'#13#10 +
+    '  public'#13#10 +
+    '    property &Unit: Boolean read FUnit write FUnit;'#13#10 +
+    '    property &Property: String read FProperty write FProperty;'#13#10 +
+    '    property &type: Integer read FType write FType;'#13#10 +
+    '    property &record: Double read FRecord write FRecord;'#13#10 +
+    '  end;'#13#10;
+
+  var JSON := '''
+    {
+      "definitions": {
+        "MyClass": {
+          "properties": {
+            "Unit": {
+              "type": "boolean"
+            },
+            "Property": {
+              "type": "string"
+            },
+            "type": {
+              "type": "integer"
+            },
+            "record": {
+              "type": "number"
+            }
+          }
         }
       }
     }
